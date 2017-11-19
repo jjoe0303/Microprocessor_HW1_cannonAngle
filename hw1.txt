@@ -1,0 +1,71 @@
+LIST p=18f4520		
+#include<p18f4520.inc>		
+; CONFIG1H
+  CONFIG  OSC = INTIO67              ; Oscillator Selection bits (Internal oscillator block, port function on RA6 and RA7)
+; CONFIG2H
+  CONFIG  WDT = OFF             ; Watchdog Timer Enable bit (WDT disabled (control is placed on the SWDTEN bit))
+
+  
+ilimit equ 0x57; loop index limit
+count set 0x00; count the 2 theta 
+ii  set 0x03; loop index
+x set 0x01; 10 distance
+theta set 0x02; 2 theta
+    org 0x00
+    goto start    
+    
+start:	clrf	count,A
+	movlw	ilimit
+	movwf	ii; initialize ii to ilimit
+	movlw	upper array
+	movwf	TBLPTRU,A
+	movlw	high array
+	movwf	TBLPTRH,A
+	movlw	low array
+	movwf	TBLPTRL,A
+	MOVLW	d'150' ;give the value of "10x"
+	MOVWF x ;move 10x to 0x001
+	MOVLW 0xFF
+	MOVWF LATB ;the different of 256sin(2theta)-10x
+	CLRF LATC; temp the different
+	;movlw	mask
+i_loop:	tblrd*+; read an array element into TABLAT
+	MOVF	    TABLAT,W,A
+	CPFSGT	    x ;need to know 10x &  256sin(2theta) which is bigger
+	goto tablebig
+	MOVF	    TABLAT,W,A
+	SUBWF	    x,W,A ; 10x >  256sin(2theta), so sub x-TABLAT
+	MOVFF	    WREG,LATC	;LATC is used to store the sub 
+	MOVF	    LATB,W,A
+	CPFSGT	    LATC ;when the new distance < original min distance(new 256sin(2theta) more close to 10x) , goto change function
+	GOTO change 
+	GOTO next
+tablebig:  
+	MOVF	    x,W,A
+	SUBWF	    TABLAT,W,A  ;10x <  256sin(2theta), so sub x-TABLAT
+	MOVFF	    WREG,LATC ;store sub in LATC
+	MOVF	    LATB,W,A
+	CPFSGT	    LATC ;when the new distance < original min distance , goto change function
+	GOTO change 
+	GOTO	next
+change:
+	MOVFF LATC,LATB ;record the new min distance in LATB
+	MOVFF	count,theta ;record now's new "2theta" in 0x002
+	goto	next
+	
+;construct my 256*sin(2*theta) table	
+array:	db  d'0',d'4',d'9',d'13',d'18',d'22',d'27',d'31',d'36',d'40'
+	db  d'44',d'49',d'53',d'58',d'62',d'66',d'71',d'75',d'79',d'83'
+	db  d'88',d'92',d'96',d'100',d'104',d'108',d'112',d'116',d'120',d'124'
+	db  d'128',d'132',d'136',d'139',d'143',d'147',d'150',d'154',d'158',d'161'
+	db  d'165',d'168',d'171',d'175',d'178',d'181',d'184',d'187',d'190',d'193'
+	db  d'196',d'199',d'202',d'204',d'207',d'210',d'212',d'215',d'217',d'219'
+	db  d'222',d'224',d'226',d'228',d'230',d'232',d'234',d'236',d'237',d'239'
+	db  d'241',d'242',d'243',d'245',d'246',d'247',d'248',d'249',d'250',d'251'
+	db  d'252',d'253',d'254',d'254',d'255',d'255',d'255',d'256',d'256',d'256',d'256'
+
+next:	incf	count,F,A; 
+	decfsz	ii,F,A; decrement loop count skip if ii=0	
+	bra i_loop
+	nop
+end
